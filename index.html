@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monómetro Multipista — Independiente & Sincronizado</title>
+  <style>
+    :root {
+      --bg: #0f172a;        /* slate-900 */
+      --card: #111827;      /* gray-900 */
+      --muted: #6b7280;     /* gray-500 */
+      --text: #e5e7eb;      /* gray-200 */
+      --acc: #60a5fa;       /* blue-400 */
+      --acc-2: #34d399;     /* emerald-400 */
+      --danger: #f87171;    /* red-400 */
+      --warn: #fbbf24;      /* amber-400 */
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial;
+      background: linear-gradient(180deg, #0b1022, #0f172a);
+      color: var(--text);
+    }
+    header { padding: 24px 16px; text-align: center; }
+    header h1 { margin: 0 0 6px; font-weight: 800; letter-spacing: 0.2px; }
+    header p { margin: 0; color: var(--muted); }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 16px; }
+
+    .panel {
+      background: rgba(17,24,39,.8);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+
+    .toolbar { display:flex; gap:12px; align-items:center; flex-wrap: wrap; }
+    .toolbar .group { display:flex; gap:8px; align-items:center; }
+
+    label { font-size: 14px; color: var(--muted); }
+    input[type="number"], input[type="text"], select {
+      background:#0b1328; color: var(--text);
+      border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:8px 10px; width: 120px;
+    }
+    input[disabled] { opacity:.5; }
+
+    .btn {
+      border: 1px solid rgba(255,255,255,.08);
+      background: #0b1328; color: var(--text);
+      border-radius: 10px; padding: 8px 12px; cursor: pointer; transition: .15s ease; font-weight: 600;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn.primary { background: linear-gradient(135deg, #1d4ed8, #60a5fa); border-color: transparent; }
+    .btn.warning { background: linear-gradient(135deg, #b45309, #f59e0b); border-color: transparent; }
+    .btn.danger { background: linear-gradient(135deg, #b91c1c, #ef4444); border-color: transparent; }
+    .btn.success { background: linear-gradient(135deg, #065f46, #34d399); border-color: transparent; }
+    .btn.ghost { opacity:.85; }
+
+    .tracks { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 16px; }
+    .track { padding: 14px; border-radius: 14px; border:1px solid rgba(255,255,255,.06); background: rgba(2,6,23,.55); }
+    .track h3 { margin:0 0 10px; display:flex; justify-content:space-between; align-items:center; font-size: 16px; }
+
+    .row { display:flex; gap:8px; align-items:center; flex-wrap: wrap; margin-bottom: 8px; }
+    .row input { width: 90px; }
+
+    ul { list-style: none; padding: 0; margin: 8px 0 0; display:flex; flex-direction:column; gap:8px; }
+    li.section { background:#0b1328; border: 1px solid rgba(255,255,255,.08); padding:8px; border-radius:10px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .section .meta { font-size: 12px; color: var(--muted); }
+
+    .pill { padding: 2px 8px; border-radius: 999px; font-size: 12px; border:1px solid rgba(255,255,255,.1); }
+    .pill.running { background: rgba(52,211,153,.1); color: #34d399; border-color: rgba(52,211,153,.25); }
+    .pill.stopped { background: rgba(248,113,113,.06); color: #fca5a5; border-color: rgba(248,113,113,.25); }
+
+    .meter { font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: .5px; }
+    .muted { color: var(--muted); }
+
+    .footer { margin-top: 18px; text-align:center; color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Monómetro Multipista a Diego le gusta el Loly</h1>
+    <p>Modo independiente (BPM por pista) o sincronizado (BPM global) con clics por tiempo y secuencias por compases.</p>
+  </header>
+
+  <div class="container">
+    <div class="panel" id="controlPanel">
+      <div class="toolbar" style="justify-content:space-between;">
+        <div class="group">
+          <label><input type="radio" name="mode" value="independent" checked /> Independiente</label>
+          <label><input type="radio" name="mode" value="synced" /> Sincronizado</label>
+          <div class="group">
+            <label for="globalBpm">BPM global</label>
+            <input type="number" id="globalBpm" value="120" min="20" max="400" disabled />
+          </div>
+        </div>
+        <div class="group">
+          <button class="btn primary" id="startBtn">Iniciar</button>
+          <button class="btn warning" id="pauseBtn">Pausar</button>
+          <button class="btn danger" id="resetBtn">Reiniciar</button>
+          <button class="btn success" id="addTrackBtn">➕ Nueva pista</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tracks" id="tracks"></div>
+
+    <div class="footer">Tip: en modo sincronizado se usa el BPM global y se ignoran los BPM de cada sección de pista.</div>
+  </div>
+
+  <script>
+    // ====== Audio (Web Audio API) ======
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioCtx();
+    let audioUnlocked = false;
+
+    function unlockAudio() {
+      if (!audioUnlocked) {
+        const buffer = audioCtx.createBuffer(1, 1, 22050);
+        const source = audioCtx.createBufferSource();
+        source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
+        audioUnlocked = true;
+      }
+    }
+
+    // Click por pista: primer tiempo fuerte, resto suave
+    function click(trackId, isDownbeat) {
+      const freq = isDownbeat ? 880 : 550; // Hz
+      const dur = isDownbeat ? 0.06 : 0.04; // s
+      const vol = (isDownbeat ? 0.9 : 0.55) * (tracks[trackId]?.muted ? 0 : 1);
+
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + dur);
+    }
+
+    // ====== Estado ======
+    const tracks = []; // { id, name, muted, sections:[{bpm, beatsPerBar, bars}], state:{secIdx, bar, beat}, timer, running }
+    let globalTimer = null;
+
+    // ====== Utilidades ======
+    const $ = (q, el=document) => el.querySelector(q);
+    const $$ = (q, el=document) => Array.from(el.querySelectorAll(q));
+
+    function makeId() { return Math.random().toString(36).slice(2,8); }
+
+    function sectionLabel(s) {
+      return `${s.bars} compás(es) — ${s.beatsPerBar}/4 @ ${s.bpm} BPM`;
+    }
+
+    function renderTracks() {
+      const wrap = $('#tracks');
+      wrap.innerHTML = '';
+      tracks.forEach(t => {
+        const el = document.createElement('div');
+        el.className = 'track';
+        el.id = `track-${t.id}`;
+        el.innerHTML = `
+          <h3>
+            <span>🎚️ ${t.name}</span>
+            <span>
+              <span class="pill ${t.running ? 'running' : 'stopped'}" id="status-${t.id}">${t.running ? 'RUN' : 'STOP'}</span>
+              <button class="btn ghost" data-action="mute" data-id="${t.id}">${t.muted ? '🔇' : '🔊'}</button>
+              <button class="btn ghost" data-action="removeTrack" data-id="${t.id}">🗑️</button>
+            </span>
+          </h3>
+
+          <div class="row">
+            <input type="text" id="name-${t.id}" value="${t.name}" />
+            <button class="btn" data-action="rename" data-id="${t.id}">Renombrar</button>
+          </div>
+
+          <div class="row">
+            <input type="number" id="bpm-${t.id}" placeholder="BPM" min="20" max="400" value="120" />
+            <input type="number" id="beats-${t.id}" placeholder="Tiempos" min="1" max="16" value="4" />
+            <input type="number" id="bars-${t.id}" placeholder="Compases" min="1" max="500" value="1" />
+            <button class="btn success" data-action="addSection" data-id="${t.id}">Agregar sección</button>
+          </div>
+
+          <ul id="list-${t.id}">
+            ${t.sections.map((s, i) => `
+              <li class="section">
+                <div>
+                  <div>${sectionLabel(s)}</div>
+                  <div class="meta">Sec ${i+1}</div>
+                </div>
+                <div>
+                  <button class="btn" data-action="editSection" data-id="${t.id}" data-idx="${i}">✏️</button>
+                  <button class="btn danger" data-action="delSection" data-id="${t.id}" data-idx="${i}">🗑️</button>
+                </div>
+              </li>
+            `).join('')}
+          </ul>
+
+          <div class="row">
+            <div class="meter" id="meter-${t.id}">Compás 0 • Tiempo 0</div>
+          </div>
+        `;
+        wrap.appendChild(el);
+      });
+    }
+
+    function addTrack() {
+      const id = makeId();
+      tracks.push({ id, name:`Pista ${tracks.length+1}`, muted:false, sections:[], state:null, timer:null, running:false });
+      renderTracks();
+    }
+
+    function removeTrack(trackId) {
+      const idx = tracks.findIndex(t => t.id === trackId);
+      if (idx>=0) {
+        stopTrackTimers(tracks[idx]);
+        tracks.splice(idx,1);
+        renderTracks();
+      }
+    }
+
+    function stopTrackTimers(track){
+      if (track.timer) { clearInterval(track.timer); track.timer=null; }
+      track.running=false; updateStatusBadge(track.id);
+    }
+
+    function updateStatusBadge(id){
+      const el = $(`#status-${id}`);
+      const t = tracks.find(x=>x.id===id);
+      if (!el || !t) return;
+      el.textContent = t.running ? 'RUN' : 'STOP';
+      el.className = `pill ${t.running ? 'running' : 'stopped'}`;
+    }
+
+    function updateMeter(track){
+      const el = $(`#meter-${track.id}`);
+      if (!el) return;
+      if (!track.state) { el.textContent = 'Compás 0 • Tiempo 0'; return; }
+      el.textContent = `Compás ${track.state.bar+1} / Sec ${track.state.secIdx+1} • Tiempo ${track.state.beat+1}/${currentBeatsPerBar(track)}`;
+    }
+
+    function currentSection(track){ return track.sections[track.state.secIdx]; }
+    function currentBeatsPerBar(track){ return currentSection(track)?.beatsPerBar || 4; }
+    function currentBpm(track){ return currentSection(track)?.bpm || 120; }
+
+    // ====== Modo Independiente ======
+    function startIndependent(){
+      tracks.forEach(track=>{
+        if (track.sections.length===0) return;
+        // reset state
+        track.state = { secIdx:0, bar:0, beat:-1 };
+        runTrackIndependent(track);
+      });
+    }
+
+    function runTrackIndependent(track){
+      track.running = true; updateStatusBadge(track.id); updateMeter(track);
+      scheduleNextBeat();
+
+      function scheduleNextBeat(){
+        const bpm = currentBpm(track);
+        const periodMs = 60000 / bpm;
+        if (track.timer) clearInterval(track.timer);
+        track.timer = setInterval(onBeat, periodMs);
+      }
+
+      function onBeat(){
+        const sec = currentSection(track);
+        if (!sec) { stopTrackTimers(track); return; }
+
+        const beatsPerBar = sec.beatsPerBar;
+        track.state.beat++;
+        if (track.state.beat===0) click(tracks.indexOf(track), true); else click(tracks.indexOf(track), false);
+
+        if (track.state.beat >= beatsPerBar-1){
+          track.state.beat = -1; // se incrementará a 0 al próximo tick
+          track.state.bar++;
+          // ¿se terminó la cantidad de compases de esta sección?
+          if (track.state.bar >= sec.bars){
+            track.state.secIdx++;
+            track.state.bar = 0;
+            // si cambia la sección, podría cambiar el BPM → reprogramar intervalo
+            const next = currentSection(track);
+            if (!next){ stopTrackTimers(track); updateMeter(track); return; }
+            // Cambió BPM
+            if (next.bpm !== sec.bpm){
+              scheduleNextBeat();
+            }
+          }
+        }
+        updateMeter(track);
+      }
+    }
+
+    function pauseIndependent(){ tracks.forEach(stopTrackTimers); }
+
+    // ====== Modo Sincronizado ======
+    function startSynced(){
+      // reset state en todas las pistas con contenido
+      tracks.forEach(t=>{
+        if (t.sections.length>0) { t.state={secIdx:0, bar:0, beat:-1}; t.running=true; updateStatusBadge(t.id); updateMeter(t); }
+      });
+      const bpm = Number($('#globalBpm').value || 120);
+      const periodMs = 60000 / bpm;
+      if (globalTimer) clearInterval(globalTimer);
+      globalTimer = setInterval(onGlobalBeat, periodMs);
+
+      function onGlobalBeat(){
+        tracks.forEach((track, idx)=>{
+          if (!track.running || !track.state) return;
+          const sec = currentSection(track);
+          if (!sec) { track.running=false; updateStatusBadge(track.id); return; }
+
+          // avanzar beat en su propio compás
+          const beatsPerBar = sec.beatsPerBar;
+          track.state.beat++;
+          click(idx, track.state.beat===0);
+
+          if (track.state.beat >= beatsPerBar-1){
+            track.state.beat = -1;
+            track.state.bar++;
+            if (track.state.bar >= sec.bars){
+              track.state.secIdx++;
+              track.state.bar = 0;
+              if (!currentSection(track)) { track.running=false; updateStatusBadge(track.id); }
+            }
+          }
+          updateMeter(track);
+        });
+
+        // Si todas las pistas están detenidas, paramos el reloj global
+        const anyRunning = tracks.some(t=>t.running);
+        if (!anyRunning) { clearInterval(globalTimer); globalTimer=null; }
+      }
+    }
+
+    function pauseSynced(){ if (globalTimer) { clearInterval(globalTimer); globalTimer=null; } tracks.forEach(t=>t.running=false); tracks.forEach(updateStatusBadgeFor); }
+    function updateStatusBadgeFor(t){ updateStatusBadge(t.id); }
+
+    // ====== Controles globales ======
+    function start(){ unlockAudio(); const mode = $('input[name="mode"]:checked').value; mode==='independent' ? startIndependent() : startSynced(); }
+    function pause(){ const mode = $('input[name="mode"]:checked').value; mode==='independent' ? pauseIndependent() : pauseSynced(); }
+    function reset(){ pauseIndependent(); pauseSynced(); tracks.forEach(t=>{ t.state=null; t.running=false; updateStatusBadge(t.id); updateMeter(t); }); }
+
+    // ====== Eventos UI ======
+    $('#addTrackBtn').addEventListener('click', addTrack);
+    $('#startBtn').addEventListener('click', start);
+    $('#pauseBtn').addEventListener('click', pause);
+    $('#resetBtn').addEventListener('click', reset);
+
+    document.addEventListener('click', (e)=>{
+      const btn = e.target.closest('button'); if (!btn) return;
+      const action = btn.getAttribute('data-action'); if (!action) return;
+      const trackId = btn.getAttribute('data-id');
+      const t = tracks.find(x=>x.id===trackId);
+
+      if (action==='addSection'){
+        const bpm = Number($(`#bpm-${trackId}`).value||120);
+        const beats = Number($(`#beats-${trackId}`).value||4);
+        const bars = Number($(`#bars-${trackId}`).value||1);
+        if (bpm>0 && beats>0 && bars>0){ t.sections.push({ bpm, beatsPerBar:beats, bars }); renderTracks(); }
+      }
+
+      if (action==='delSection'){
+        const idx = Number(btn.getAttribute('data-idx'));
+        t.sections.splice(idx,1); renderTracks();
+      }
+
+      if (action==='editSection'){
+        const idx = Number(btn.getAttribute('data-idx'));
+        const s = t.sections[idx];
+        const nbpm = Number(prompt('Nuevo BPM', s.bpm) || s.bpm);
+        const nbeats = Number(prompt('Tiempos por compás', s.beatsPerBar) || s.beatsPerBar);
+        const nbars = Number(prompt('Cantidad de compases', s.bars) || s.bars);
+        if (nbpm>0 && nbeats>0 && nbars>0){ t.sections[idx] = { bpm: nbpm, beatsPerBar: nbeats, bars: nbars }; renderTracks(); }
+      }
+
+      if (action==='removeTrack'){
+        removeTrack(trackId);
+      }
+
+      if (action==='rename'){
+        const newName = $(`#name-${trackId}`).value.trim();
+        if (newName) { t.name=newName; renderTracks(); }
+      }
+
+      if (action==='mute'){
+        t.muted = !t.muted; btn.textContent = t.muted ? '🔇' : '🔊';
+      }
+    });
+
+    // Cambiar modo → activar/desactivar BPM global
+    $$('input[name="mode"]').forEach(r=>{
+      r.addEventListener('change', ()=>{
+        const synced = $('input[name="mode"]:checked').value === 'synced';
+        $('#globalBpm').disabled = !synced;
+      });
+    });
+
+    // ====== Inicial ======
+    addTrack();
+  </script>
+</body>
+</html>
